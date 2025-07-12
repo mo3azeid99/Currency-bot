@@ -5,6 +5,7 @@ import requests
 import schedule
 import time
 import re
+import os
 
 # ✅ تشغيل Web Server بسيط عشان البوت يفضل شغال
 app = Flask('')
@@ -17,8 +18,7 @@ def keep_alive():
     t = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8080))
     t.start()
 
-# ✅ توكن البوت من secret
-import os
+# ✅ مفاتيح من البيئة
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 EXCHANGE_API_KEY = os.getenv("EXCHANGE_API_KEY")
 
@@ -65,17 +65,22 @@ def handle_conversion(message):
 # ✅ تخزين التنبيهات اليومية
 daily_alerts = set()
 
-# ✅ أمر: alert USD TO EGP
-@bot.message_handler(func=lambda m: re.match(r'^alert\s+[A-Z]{3}\s+TO\s+[A-Z]{3}$', m.text.strip().upper()))
+# ✅ التعامل مع alert بصيغة مرنة
+@bot.message_handler(func=lambda m: m.text.lower().startswith("alert"))
 def handle_alert_command(message):
-    match = re.match(r'^alert\s+([A-Z]{3})\s+TO\s+([A-Z]{3})$', message.text.strip().upper())
-    if match:
-        from_curr, to_curr = match.groups()
-        chat_id = message.chat.id
-        daily_alerts.add((chat_id, from_curr, to_curr))
-        bot.reply_to(message, f"📬 هنبعتلك كل يوم سعر {from_curr} مقابل {to_curr}")
-    else:
-        bot.reply_to(message, "❌ الصيغة غلط. ابعتلي كده: `alert USD TO EGP`", parse_mode='Markdown')
+    try:
+        msg = message.text.strip().upper()
+        match = re.match(r'^ALERT\s+([A-Z]{3})\s+TO\s+([A-Z]{3})$', msg)
+        if match:
+            from_curr, to_curr = match.groups()
+            chat_id = message.chat.id
+            daily_alerts.add((chat_id, from_curr, to_curr))
+            bot.reply_to(message, f"📬 هنبعتلك كل يوم سعر {from_curr} مقابل {to_curr}")
+        else:
+            raise ValueError("❌ الصيغة غلط. ابعتلي كده: `alert USD TO EGP`")
+
+    except Exception as e:
+        bot.reply_to(message, str(e))
 
 # ✅ أمر /stop لإلغاء كل التنبيهات
 @bot.message_handler(commands=['stop'])
@@ -103,7 +108,7 @@ def send_daily_alerts():
         except Exception as e:
             print(f"❌ ERROR: {e}")
 
-# ✅ جدولة المهمة يوميًا الساعة 09:00
+# ✅ جدولة المهمة يوميًا الساعة 09:00 صباحًا
 schedule.every().day.at("09:00").do(send_daily_alerts)
 
 def run_scheduler():
@@ -111,8 +116,9 @@ def run_scheduler():
         schedule.run_pending()
         time.sleep(60)
 
-# ✅ تشغيل السيرفر والبوت والجدولة
+# ✅ تشغيل كل حاجة
 keep_alive()
 threading.Thread(target=run_scheduler).start()
 print("🤖 Bot is running...")
 bot.polling(non_stop=True, timeout=30)
+
